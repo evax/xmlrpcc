@@ -198,7 +198,7 @@ decode(String) ->
    String.
 
 parse_member(M) ->
-   [Name] = get_tags(M, name),
+   [Name|_] = get_tags(M, name),
    [Value] = get_tags(M, value),
    {binstrip(Name), decode(binstrip(Value))}.
 

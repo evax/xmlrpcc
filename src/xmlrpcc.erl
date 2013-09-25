@@ -159,6 +159,10 @@ next(Bin, Pattern, Offset) ->
 decode(<<"<value>", _/binary>>=V) ->
    [BV] = get_tags(V, value),
    decode(binstrip(BV));
+decode(<<"<nil>">>) ->
+   none;
+decode(<<"<nil/>">>) ->
+   none;
 decode(<<"<int>", _/binary>>=I) ->
    [BI] = get_tags(I, int),
    binary_to_integer(binstrip(BI));

@@ -190,7 +190,7 @@ decode(<<"<base64>", _/binary>>=B64) ->
 decode(<<"<struct>", _/binary>>=S) ->
    [BS] = get_tags(S, struct),
    [ parse_member(M) || M <- get_tags(BS, member) ];
-decode(<<"<array>", _binary>>=A) ->
+decode(<<"<array>", _/binary>>=A) ->
    [BA] = get_tags(A, array),
    [Data] = get_tags(BA, data),
    [ decode(V) || V <- get_tags(Data, value) ];

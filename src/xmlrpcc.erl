@@ -187,7 +187,8 @@ decode(<<"<struct>", _/binary>>=S) ->
    [BS] = get_tags(S, struct),
    [ parse_member(M) || M <- get_tags(BS, member) ];
 decode(<<"<array>", _binary>>=A) ->
-   [Data] = get_tags(A, array),
+   [BA] = get_tags(A, array),
+   [Data] = get_tags(BA, data),
    [ decode(V) || V <- get_tags(Data, value) ];
 decode(String) ->
    String.

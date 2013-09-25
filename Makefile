@@ -7,6 +7,11 @@ deps:
 compile: deps
 	@rebar compile skip_deps=true
 
+tests: clean compile
+	@rebar skip_deps=true eunit
+
 clean:
 	@rm -Rf ebin
+
+dist-clean: clean
 	@rm -Rf deps

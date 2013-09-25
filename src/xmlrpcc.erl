@@ -1,17 +1,23 @@
+%% @doc A simple Erlang XMLRPC client
 -module(xmlrpcc).
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
 
 -export([start/0, call/3, call/4]).
-% debug
--export([xmlrequest/2, encode_params/1, encode_params/2, encode/1]).
--export([get_tags/2, get_tag/2 ,parse_tag/5, first_of/4, next/3]).
 
+%% @doc Helper to start the application in the console.
 start() ->
-    ok = hackney:start().
+   hackney:start(),
+   application:start(xmlrpcc).
 
-
+%% @doc XMLRPC call.
+%% @equiv call(Url, Method, Args, [])
 call(Url, Method, Args) ->
     call(Url, Method, Args, []).
 
+%% @doc XMLRPC call.
+%% The Opts argument is passed to hackney
 call(Url, Method, Args, Opts) ->
    case hackney:request(post, Url,
                         [{<<"Content-Type">>, <<"text/xml">>}],
@@ -32,6 +38,8 @@ call(Url, Method, Args, Opts) ->
                {error, decode(Value)}
          end
    end.
+
+%% Private functions
 
 xmlrequest(Method, Args) ->
    M = coerce_binary(Method),
@@ -55,16 +63,20 @@ encode_params([], Acc) ->
 encode_params([P|R], Acc) ->
    encode_params(R, <<Acc/binary, "<param>", (encode(P))/binary, "</param>">>).
 
+encode(nil) ->
+   value(<<"<nil/>">>);
+encode(none) ->
+   value(<<"<nil/>">>);
 encode(I) when is_integer(I) ->
    value(<<"<int>", (integer_to_binary(I))/binary, "</int>">>);
 encode(true) ->
    value(<<"<boolean>1</boolean>">>);
 encode(false) ->
-   value(<<"<boolean>0</boolean>>">>);
+   value(<<"<boolean>0</boolean>">>);
 encode(B) when is_binary(B) ->
    value(<<"<string>", (escape(B))/binary, "</string>">>);
 encode(F) when is_float(F) ->
-   value(<<"<double>", (float_to_binary(F))/binary, "</double">>);
+   value(<<"<double>", (float_to_binary(F))/binary, "</double>">>);
 encode({{_,_,_},{_,_,_}}=DateTime) ->
    encode({datetime, iso8601:format(DateTime)});
 encode({datetime, DateTime}) ->
@@ -72,20 +84,26 @@ encode({datetime, DateTime}) ->
 encode({base64, B}) when is_binary(B) ->
    value(<<"<base64>", B/binary, "</base64>">>);
 encode(L) when is_list(L) ->
-   <<"<array><data>",
-     (binary:list_to_bin([ encode(E) || E <- L]))/binary,
-     "</data></array>">>;
+   value(
+      <<"<array><data>",
+      (binary:list_to_bin([ encode(E) || E <- L]))/binary,
+      "</data></array>">>);
 encode({struct, L}) when is_list(L) ->
-   <<"<struct>",
-     (binary:list_to_bin([ <<"<member><name>",
+   value(
+      <<"<struct>",
+      (binary:list_to_bin([ <<"<member><name>",
                              (escape(coerce_binary(N)))/binary, "</name>",
-                             (encode(V))/binary, "</member">>
+                             (encode(V))/binary, "</member>">>
                           || {N, V} <- L ]))/binary,
-     "</struct>">>.
+      "</struct>">>).
 
 escape(B) ->
-   B1 = binary:replace(B, <<"<">>, <<"&lt;">>, [global]),
-   binary:replace(B1, <<"&">>, <<"&amp;">>, [global]).
+   B1 = binary:replace(B, <<"&">>, <<"&amp;">>, [global]),
+   binary:replace(B1, <<"<">>, <<"&lt;">>, [global]).
+
+unescape(B) ->
+   B1 = binary:replace(B, <<"&lt;">>, <<"<">>, [global]),
+   binary:replace(B1, <<"&amp;">>, <<"&">>, [global]).
 
 value(B) ->
    <<"<value>", B/binary, "</value>">>.
@@ -108,9 +126,6 @@ get_tags(Bin, OT, CT, Offset, Acc) ->
          get_tags(Bin, OT, CT, NewOffset, [binstrip(Content)|Acc])
    end.
 
-get_tag(Bin, Tag) ->
-   {OT, CT} = expand_tag(Tag),
-   get_tag(Bin, OT, CT, 0).
 get_tag(Bin, OT, CT, Offset) ->
    case first_of(Bin, OT, CT, Offset) of
       {OT, NewOffset} ->
@@ -159,8 +174,6 @@ next(Bin, Pattern, Offset) ->
 decode(<<"<value>", _/binary>>=V) ->
    [BV] = get_tags(V, value),
    decode(binstrip(BV));
-decode(<<"<nil>">>) ->
-   none;
 decode(<<"<nil/>">>) ->
    none;
 decode(<<"<int>", _/binary>>=I) ->
@@ -180,7 +193,7 @@ decode(<<"<boolean>", _/binary>>=B) ->
    end;
 decode(<<"<string>", _/binary>>=S) ->
    [BS] = get_tags(S, string),
-   BS;
+   unescape(BS);
 decode(<<"<dateTime.iso8601>", _/binary>>=DateTime) ->
    [BDT] = get_tags(DateTime, "dateTime.iso8601"),
    iso8601:parse(BDT);
@@ -204,3 +217,46 @@ parse_member(M) ->
 
 binstrip(Bin) ->
    re:replace(Bin, "^\\s+|\\s+$", "", [{return, binary}, global]).
+
+%% Tests
+-ifdef(EUNIT).
+encode_decode_test() ->
+   ?assertEqual(ok, start()),
+   Int = encode(12),
+   ?assertEqual(Int, <<"<value><int>12</int></value>">>),
+   ?assertEqual(12, decode(Int)),
+   Double = encode(1.2),
+   ?assertMatch(<<"<value><double>", _/binary>>, Double),
+   ?assertEqual(1.2, decode(Double)),
+   True = encode(true),
+   ?assertEqual(True, <<"<value><boolean>1</boolean></value>">>),
+   ?assertEqual(true, decode(True)),
+   False = encode(false),
+   ?assertEqual(False, <<"<value><boolean>0</boolean></value>">>),
+   ?assertEqual(false, decode(False)),
+   Nil = encode(none),
+   Nil2 = encode(nil),
+   ?assertEqual(Nil, Nil2),
+   ?assertEqual(Nil, <<"<value><nil/></value>">>),
+   ?assertEqual(none, decode(Nil)),
+   String = encode(<<"test<&">>),
+   ?assertEqual(String, <<"<value><string>test&lt;&amp;</string></value>">>),
+   ?assertEqual(<<"test<&">>, decode(String)),
+   Array = encode([nil, 2, <<"three">>]),
+   ?assertEqual(Array, <<"<value><array><data><value><nil/></value><value><int>2</int></value><value><string>three</string></value></data></array></value>">>),
+   ?assertEqual([none, 2, <<"three">>], decode(Array)),
+   Struct = encode({struct, [{<<"a">>, 1}, {<<"b">>, 2}]}),
+   io:format("~p", [Struct]),
+   ?assertEqual(Struct, <<"<value><struct><member><name>a</name><value><int>1</int></value></member><member><name>b</name><value><int>2</int></value></member></struct></value>">>),
+   ?assertEqual([{<<"a">>, 1}, {<<"b">>, 2}], decode(Struct)),
+   Base64 = encode({base64, <<"dGVzdA==">>}),
+   ?assertEqual(Base64, <<"<value><base64>dGVzdA==</base64></value>">>),
+   ?assertEqual({base64, <<"dGVzdA==">>}, decode(Base64)),
+   DateTime = encode({{2013,9,25},{14,57,29}}),
+   ?assertEqual(DateTime, <<"<value><dateTime.iso8601>2013-09-25T14:57:29Z</dateTime.iso8601></value>">>),
+   ?assertEqual({{2013,9,25},{14,57,29}}, decode(DateTime)),
+   ?assertEqual(<<"test">>, decode(<<"test">>)),
+   ?assertEqual(12, decode(<<"<value><i4>12</i4></value>">>)),
+   ?assertEqual(xmlrequest('test.method', [1]), <<"<?xml version=\"1.0\"?><methodCall><methodName>test.method</methodName><params><param><value><int>1</int></value></param></params></methodCall>">>),
+   ?assertEqual(ok, application:stop(xmlrpcc)).
+-endif.

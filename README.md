@@ -1,4 +1,4 @@
 xmlrpcc
 =======
 
-A simple XMLRPC client library
+A simple XMLRPC client library.

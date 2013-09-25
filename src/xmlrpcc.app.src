@@ -1,0 +1,14 @@
+{application, xmlrpcc, [
+    {description, "Erlang XMLRPC client"},
+    {vsn, "0.1.0"},
+    {modules, []},
+    {registered, []},
+    {applications, [
+        kernel,
+        stdlib,
+        crypto,
+        hackney
+    ]},
+    {mod, {xmlrpcc_app, []}},
+    {env, []}
+]}.

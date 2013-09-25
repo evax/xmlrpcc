@@ -21,15 +21,15 @@ call(Url, Method, Args, Opts) ->
       {ok, 200, _, Client} ->
          {ok, Body, _} = hackney:body(Client),
          [Resp] = get_tags(Body, methodResponse),
-         case get_tag(Resp, fault) of
-            undefined ->
+         case get_tags(Resp, fault) of
+            [] ->
                [Params] = get_tags(Resp, params),
                [Param] = get_tags(Params, param),
                [Value] = get_tags(Param, value),
                {ok, decode(Value)};
-            Fault ->
+            [Fault] ->
                [Value] = get_tags(Fault, value),
-               {fault, decode(Value)}
+               {error, decode(Value)}
          end
    end.
 
